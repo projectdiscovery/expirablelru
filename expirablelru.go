@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-// ExpirableLRU implements a thread safe LRU with expirable entries.
-type ExpirableLRU struct {
+// Cache implements a thread safe LRU with expirable entries.
+type Cache struct {
 	size       int
 	purgeEvery time.Duration
 	ttl        time.Duration
@@ -45,7 +45,7 @@ const noEvictionTTL = time.Hour * 24 * 365 * 10
 //
 // Activates deleteExpired by purgeEvery duration.
 // If MaxKeys and TTL are defined and PurgeEvery is zero, PurgeEvery will be set to 5 minutes.
-func NewExpirableLRU(size int, onEvict EvictCallback, ttl, purgeEvery time.Duration) *ExpirableLRU {
+func NewExpirableLRU(size int, onEvict EvictCallback, ttl, purgeEvery time.Duration) *Cache {
 	if size < 0 {
 		size = 0
 	}
@@ -53,7 +53,7 @@ func NewExpirableLRU(size int, onEvict EvictCallback, ttl, purgeEvery time.Durat
 		ttl = noEvictionTTL
 	}
 
-	res := ExpirableLRU{
+	res := Cache{
 		items:      map[interface{}]*list.Element{},
 		evictList:  list.New(),
 		ttl:        ttl,
@@ -87,17 +87,17 @@ func NewExpirableLRU(size int, onEvict EvictCallback, ttl, purgeEvery time.Durat
 }
 
 // Add adds a key and a value to the LRU interface
-func (c *ExpirableLRU) Add(key, value interface{}) (evicted bool) {
+func (c *Cache) Add(key, value interface{}) (evicted bool) {
 	return c.add(key, value, c.ttl)
 }
 
 // AddWithTTL adds a key and a value with a TTL to the LRU interface
-func (c *ExpirableLRU) AddWithTTL(key, value interface{}, ttl time.Duration) (evicted bool) {
+func (c *Cache) AddWithTTL(key, value interface{}, ttl time.Duration) (evicted bool) {
 	return c.add(key, value, ttl)
 }
 
 // add performs the actual addition to the LRU cache
-func (c *ExpirableLRU) add(key, value interface{}, ttl time.Duration) (evicted bool) {
+func (c *Cache) add(key, value interface{}, ttl time.Duration) (evicted bool) {
 	c.Lock()
 	defer c.Unlock()
 	now := time.Now()
@@ -124,7 +124,7 @@ func (c *ExpirableLRU) add(key, value interface{}, ttl time.Duration) (evicted b
 }
 
 // Get returns the key value
-func (c *ExpirableLRU) Get(key interface{}) (interface{}, bool) {
+func (c *Cache) Get(key interface{}) (interface{}, bool) {
 	c.Lock()
 	defer c.Unlock()
 	if ent, ok := c.items[key]; ok {
@@ -139,7 +139,7 @@ func (c *ExpirableLRU) Get(key interface{}) (interface{}, bool) {
 }
 
 // Peek returns the key value (or undefined if not found) without updating the "recently used"-ness of the key.
-func (c *ExpirableLRU) Peek(key interface{}) (interface{}, bool) {
+func (c *Cache) Peek(key interface{}) (interface{}, bool) {
 	c.Lock()
 	defer c.Unlock()
 	if ent, ok := c.items[key]; ok {
@@ -153,7 +153,7 @@ func (c *ExpirableLRU) Peek(key interface{}) (interface{}, bool) {
 }
 
 // GetOldest returns the oldest entry
-func (c *ExpirableLRU) GetOldest() (key, value interface{}, ok bool) {
+func (c *Cache) GetOldest() (key, value interface{}, ok bool) {
 	c.Lock()
 	defer c.Unlock()
 	ent := c.evictList.Back()
@@ -166,7 +166,7 @@ func (c *ExpirableLRU) GetOldest() (key, value interface{}, ok bool) {
 
 // Contains checks if a key is in the cache, without updating the recent-ness
 // or deleting it for being stale.
-func (c *ExpirableLRU) Contains(key interface{}) (ok bool) {
+func (c *Cache) Contains(key interface{}) (ok bool) {
 	c.Lock()
 	defer c.Unlock()
 	_, ok = c.items[key]
@@ -174,7 +174,7 @@ func (c *ExpirableLRU) Contains(key interface{}) (ok bool) {
 }
 
 // Remove key from the cache
-func (c *ExpirableLRU) Remove(key interface{}) bool {
+func (c *Cache) Remove(key interface{}) bool {
 	c.Lock()
 	defer c.Unlock()
 	if ent, ok := c.items[key]; ok {
@@ -185,7 +185,7 @@ func (c *ExpirableLRU) Remove(key interface{}) bool {
 }
 
 // RemoveOldest removes the oldest item from the cache.
-func (c *ExpirableLRU) RemoveOldest() (key, value interface{}, ok bool) {
+func (c *Cache) RemoveOldest() (key, value interface{}, ok bool) {
 	c.Lock()
 	defer c.Unlock()
 	ent := c.evictList.Back()
@@ -198,14 +198,14 @@ func (c *ExpirableLRU) RemoveOldest() (key, value interface{}, ok bool) {
 }
 
 // Keys returns a slice of the keys in the cache, from oldest to newest.
-func (c *ExpirableLRU) Keys() []interface{} {
+func (c *Cache) Keys() []interface{} {
 	c.Lock()
 	defer c.Unlock()
 	return c.keys()
 }
 
 // Purge clears the cache completely.
-func (c *ExpirableLRU) Purge() {
+func (c *Cache) Purge() {
 	c.Lock()
 	defer c.Unlock()
 	for k, v := range c.items {
@@ -218,21 +218,21 @@ func (c *ExpirableLRU) Purge() {
 }
 
 // DeleteExpired clears cache of expired items
-func (c *ExpirableLRU) DeleteExpired() {
+func (c *Cache) DeleteExpired() {
 	c.Lock()
 	defer c.Unlock()
 	c.deleteExpired()
 }
 
 // Len return count of items in cache
-func (c *ExpirableLRU) Len() int {
+func (c *Cache) Len() int {
 	c.Lock()
 	defer c.Unlock()
 	return c.evictList.Len()
 }
 
 // Resize changes the cache size. size 0 doesn't resize the cache, as it means unlimited.
-func (c *ExpirableLRU) Resize(size int) (evicted int) {
+func (c *Cache) Resize(size int) (evicted int) {
 	if size <= 0 {
 		return 0
 	}
@@ -250,14 +250,14 @@ func (c *ExpirableLRU) Resize(size int) (evicted int) {
 }
 
 // Close cleans the cache and destroys running goroutines
-func (c *ExpirableLRU) Close() {
+func (c *Cache) Close() {
 	c.Lock()
 	defer c.Unlock()
 	close(c.done)
 }
 
 // removeOldest removes the oldest item from the cache. Has to be called with lock!
-func (c *ExpirableLRU) removeOldest() {
+func (c *Cache) removeOldest() {
 	ent := c.evictList.Back()
 	if ent != nil {
 		c.removeElement(ent)
@@ -265,7 +265,7 @@ func (c *ExpirableLRU) removeOldest() {
 }
 
 // Keys returns a slice of the keys in the cache, from oldest to newest. Has to be called with lock!
-func (c *ExpirableLRU) keys() []interface{} {
+func (c *Cache) keys() []interface{} {
 	keys := make([]interface{}, 0, len(c.items))
 	for ent := c.evictList.Back(); ent != nil; ent = ent.Prev() {
 		keys = append(keys, ent.Value.(*expirableEntry).key)
@@ -274,7 +274,7 @@ func (c *ExpirableLRU) keys() []interface{} {
 }
 
 // removeElement is used to remove a given list element from the cache. Has to be called with lock!
-func (c *ExpirableLRU) removeElement(e *list.Element) {
+func (c *Cache) removeElement(e *list.Element) {
 	c.evictList.Remove(e)
 	kv := e.Value.(*expirableEntry)
 	delete(c.items, kv.key)
@@ -284,7 +284,7 @@ func (c *ExpirableLRU) removeElement(e *list.Element) {
 }
 
 // deleteExpired deletes expired records. Has to be called with lock!
-func (c *ExpirableLRU) deleteExpired() {
+func (c *Cache) deleteExpired() {
 	for _, key := range c.keys() {
 		if time.Now().After(c.items[key].Value.(*expirableEntry).expiresAt) {
 			c.removeElement(c.items[key])
